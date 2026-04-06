@@ -1,0 +1,137 @@
+name: org-memory-env
+version: 1.0.0
+description: >
+  RL environment for organizational communication debt resolution.
+  Agents must trace decisions, surface broken commitments, and reconstruct
+  institutional knowledge from realistic synthetic communication histories.
+
+tasks:
+  - id: decision_archaeology
+    difficulty: medium
+    max_steps: 20
+    reward_range: [0.0, 1.0]
+    description: >
+      Trace the root cause of a known outcome back through an 8-hop decision chain.
+      Identify the original decision, all intermediate steps, and the accountable party.
+
+  - id: commitment_detection
+    difficulty: hard
+    max_steps: 35
+    reward_range: [0.0, 1.0]
+    description: >
+      Surface all silently dropped commitments from 60 days of communications.
+      Rank them by organizational risk. Do not flag resolved commitments.
+
+  - id: knowledge_recovery
+    difficulty: expert
+    max_steps: 50
+    reward_range: [0.0, 1.0]
+    description: >
+      Draft a knowledge transfer document for a departing senior engineer.
+      Cover all critical systems, key decisions, collaborators, and open items.
+
+observation_space: structured_text_graph
+action_space: discrete_retrieval_plus_generation
+
+action_types:
+  - name: retrieve_messages
+    description: BM25 keyword search on message corpus with optional filters
+    parameters:
+      required: [query]
+      optional: [person_id, date_from, date_to, project_id, channel, top_k]
+    returns: "List of up to 10 matching messages"
+
+  - name: trace_thread
+    description: Follow a thread chain to retrieve all related messages
+    parameters:
+      required: [thread_id]
+      optional: [direction]  # forward, backward, both
+    returns: "All messages in the thread, sorted by timestamp"
+
+  - name: tag_decision
+    description: Mark a message as containing a decision
+    parameters:
+      required: [message_id, decision_text]
+      optional: [accountable_person_id]
+    returns: "Confirmation and intermediate reward"
+
+  - name: tag_commitment
+    description: Mark a message as containing a commitment
+    parameters:
+      required: [message_id, committer_id, commitment_text]
+      optional: [risk_level]
+    returns: "Confirmation and intermediate reward"
+
+  - name: link_cause_effect
+    description: Link two messages in a causal relationship
+    parameters:
+      required: [cause_message_id, effect_message_id]
+      optional: [explanation]
+    returns: "Confirmation and intermediate reward"
+
+  - name: draft_artifact
+    description: Add a section to the knowledge transfer document
+    parameters:
+      required: [section, content]
+      optional: [artifact_type]
+    returns: "Confirmation of section added"
+
+  - name: submit
+    description: Submit final answer for grading
+    parameters:
+      required: [answer]
+      optional: []
+    returns: "Final graded score and episode termination"
+
+baseline_model: gpt-4o-mini
+
+baseline_scores:
+  decision_archaeology: 0.51
+  commitment_detection: 0.41
+  knowledge_recovery: 0.33
+
+evaluation:
+  graders:
+    - task_id: decision_archaeology
+      components:
+        root_decision_found: 0.40
+        chain_hops_correct: 0.45  # +0.075 per correct hop, up to 6
+        accountability_correct: 0.15
+      penalties:
+        wrong_person_blamed: -0.10
+
+    - task_id: commitment_detection
+      components:
+        recall: 0.40  # TP / 15
+        precision: 0.30  # TP / (TP + FP)
+        risk_ranking: 0.20  # Spearman rho
+        resolution_plan_quality: 0.10
+      penalties:
+        resolved_flagged_as_dropped: -0.05
+
+    - task_id: knowledge_recovery
+      components:
+        system_coverage: 0.25
+        decision_ownership_accuracy: 0.25
+        relationship_completeness: 0.20
+        temporal_accuracy: 0.15
+        actionability_score: 0.15  # LLM-as-judge
+      penalties:
+        confidently_wrong_fact: -0.10
+
+tags:
+  - openenv
+  - real-world-simulation
+  - org-memory
+  - organizational-memory
+  - communication-debt
+  - knowledge-management
+  - multi-hop-reasoning
+  - information-retrieval
+
+# Destructive action penalties (applied during step execution)
+destructive_action_penalties:
+  hallucinated_message_id: -0.05    # Using a message_id that doesn't exist
+  hallucinated_thread_id: -0.05     # Using a thread_id that doesn't exist
+  hallucinated_person_id: -0.03     # Using a person_id that doesn't exist
+  repeated_identical_action: -0.02  # Exact same action parameters repeated
