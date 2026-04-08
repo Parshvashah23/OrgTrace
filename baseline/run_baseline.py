@@ -31,8 +31,8 @@ import os
 
 load_dotenv()
 
-from env.org_memory_env import OrgMemoryEnv
-from env.models import Action
+from org_env.org_memory_env import OrgMemoryEnv
+from org_env.models import Action
 
 # ── LLM CLIENT SETUP ────────────────────────────────────────────────────────
 
