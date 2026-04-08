@@ -78,6 +78,12 @@ class StepResponse(BaseModel):
 
 # ── ENDPOINTS ────────────────────────────────────────────────────────────────
 
+@app.get("/")
+def home_health():
+    """Root health check endpoint (requested by HF tutorial)."""
+    return {"status": "ok", "env": "orgtrace"}
+
+
 @app.get("/health")
 def health():
     """Health check endpoint."""
@@ -85,31 +91,47 @@ def health():
 
 
 @app.post("/reset")
-def reset(request: ResetRequest) -> dict:
+def reset(
+    request: Optional[ResetRequest] = None,
+    task_id: Optional[str] = Query(None),
+    session_id: str = Query("default"),
+) -> dict:
     """
     Initialize a new episode.
 
-    Args:
-        task_id: One of "decision_archaeology", "commitment_detection", "knowledge_recovery"
-        seed: Random seed for reproducibility
-        session_id: Session identifier for multi-agent support
+    Accepts either a JSON body (ResetRequest) or query parameters (task_id).
     """
-    if request.task_id not in TASK_CONFIG:
+    # Extract values from either request body or query params
+    if request:
+        tid = request.task_id
+        sid = request.session_id
+        seed = request.seed
+    elif task_id:
+        tid = task_id
+        sid = session_id
+        seed = 42  # default seed
+    else:
         raise HTTPException(
             status_code=400,
-            detail=f"Unknown task_id: {request.task_id}. "
+            detail="Missing task_id. Provide in JSON body or as query parameter."
+        )
+
+    if tid not in TASK_CONFIG:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown task_id: {tid}. "
                    f"Must be one of {list(TASK_CONFIG.keys())}"
         )
 
-    env = OrgMemoryEnv(data_dir=DATA_DIR, seed=request.seed)
-    envs[request.session_id] = env
+    env = OrgMemoryEnv(data_dir=DATA_DIR, seed=seed)
+    envs[sid] = env
 
-    obs = env.reset(request.task_id)
+    obs = env.reset(tid)
 
     return {
         "observation": obs.model_dump(),
-        "session_id": request.session_id,
-        "task_id": request.task_id,
+        "session_id": sid,
+        "task_id": tid,
         "max_steps": obs.max_steps,
     }
 
