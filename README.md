@@ -1,21 +1,3 @@
----
-title: OrgTrace
-emoji: 🏢
-colorFrom: blue
-colorTo: indigo
-sdk: docker
-pinned: true
-license: mit
-tags:
-  - reinforcement-learning
-  - openenv
-  - organizational-memory
-  - real-world-simulation
-  - communication-debt
-  - knowledge-management
-  - meta-hackathon
-  - multi-hop-reasoning
----
 
 # 🏢 OrgTrace — Organizational Memory RL Environment
 
@@ -24,7 +6,6 @@ tags:
 [![OpenEnv Compliant](https://img.shields.io/badge/OpenEnv-compliant-4A90D9?style=for-the-badge)](https://openenv.ai)
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-blue?style=for-the-badge&logo=python)](https://python.org)
 [![Docker](https://img.shields.io/badge/Docker-ready-2496ED?style=for-the-badge&logo=docker)](https://hub.docker.com)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
 [![HF Space](https://img.shields.io/badge/🤗%20HF%20Space-Live-yellow?style=for-the-badge)](https://huggingface.co/spaces/Parshva06/orgtrace)
 
 ---
@@ -859,12 +840,6 @@ OrgTrace is fully compliant with the OpenEnv specification:
 5. **Deterministic reproducibility** — Same `seed` always produces identical corpus, episodes, and scores.
 6. **Scalable difficulty** — Three tasks of increasing cognitive complexity test different agent capabilities without requiring new infrastructure.
 7. **Hallucination-resistant** — Agents are penalized for using IDs that don't exist, encouraging grounded retrieval over confabulation.
-
----
-
-## 📜 License
-
-MIT License. See [LICENSE](LICENSE) for details.
 
 ---
 
