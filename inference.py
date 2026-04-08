@@ -13,10 +13,10 @@ from org_env.models import Action
 # ── CONFIG ───────────────────────────────────────────────────────────────────
 
 # Mandatory environment variables
-API_BASE_URL = os.getenv("API_BASE_URL") or "https://router.huggingface.co/v1"
-MODEL_NAME = os.getenv("MODEL_NAME") or "Qwen/Qwen2.5-72B-Instruct"
-API_KEY = os.getenv("HF_TOKEN") or os.getenv("API_KEY")
-LOCAL_IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME")  # Optional, for docker usage
+API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
+MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
+HF_TOKEN = os.getenv("HF_TOKEN")
+LOCAL_IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME")  # Optional
 
 # Task Configuration
 TASK_ID = os.getenv("ORG_TRACE_TASK", "decision_archaeology")
@@ -114,10 +114,10 @@ def format_observation(obs_dict: Dict[str, Any], step: int, max_steps: int) -> s
 async def main():
     log_start(task=TASK_ID, env=BENCHMARK, model=MODEL_NAME)
 
-    if not API_KEY:
-        print("[DEBUG] Missing HF_TOKEN/API_KEY environment variable.", flush=True)
+    if not HF_TOKEN:
+        print("[DEBUG] Missing HF_TOKEN environment variable.", flush=True)
 
-    client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
+    client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
     
     # Initialize Environment
     data_dir = "data/generated/"
