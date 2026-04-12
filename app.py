@@ -102,40 +102,57 @@ async def reset(
     Initialize a new episode. Robustly accepts parameters from JSON body, 
     query parameters, or form data.
     """
-    # 1. Initialize with defaults
-    tid = None
+    # 1. Initialize with defaults (including env var fallback)
+    import os
+    tid = os.getenv("ORG_TRACE_TASK")
     sid = "default"
     seed = 42
 
-    # 2. Extract from JSON Body (if present)
-    try:
-        body_data = await request.json()
-        if isinstance(body_data, dict):
-            tid = body_data.get("task_id") or body_data.get("task")
-            sid = body_data.get("session_id") or sid
-            seed = body_data.get("seed", seed)
-    except:
-        pass # Not JSON
+    # 2. Extract from Raw Body (handles plain string or JSON)
+    raw_body = await request.body()
+    if raw_body:
+        try:
+            # Try JSON first
+            import json
+            body_data = json.loads(raw_body)
+            if isinstance(body_data, dict):
+                tid = body_data.get("task_id") or body_data.get("task") or tid
+                sid = body_data.get("session_id") or sid
+                seed = body_data.get("seed", seed)
+            elif isinstance(body_data, str):
+                tid = body_data
+        except:
+            # Fallback to raw string
+            decoded = raw_body.decode().strip().strip('"').strip("'")
+            if decoded:
+                tid = decoded
 
     # 3. Overwrite with Query Params (if present)
     tid = task_id or task or tid
     sid = session_id or sid
 
     # 4. Final check for Form data (if tid still missing)
-    if not tid:
+    if not tid or tid not in TASK_CONFIG:
         try:
             form = await request.form()
-            tid = form.get("task_id") or form.get("task")
+            tid = form.get("task_id") or form.get("task") or tid
             sid = form.get("session_id") or sid
             if form.get("seed"):
                 seed = int(form.get("seed"))
         except:
             pass
 
+    # 5. Global Default (First task in config)
     if not tid:
+        tid = list(TASK_CONFIG.keys())[0]
+        print(f"DEBUG: No task_id found in request. Defaulting to: {tid}")
+
+    print(f"DEBUG: /reset final config -> tid={tid}, sid={sid}, seed={seed}")
+
+    if tid not in TASK_CONFIG:
         raise HTTPException(
             status_code=400,
-            detail="Missing task_id. Provide in JSON body (task_id), query parameter (?task_id=), or form data."
+            detail=f"Unknown task_id: {tid}. Must be one of {list(TASK_CONFIG.keys())}"
         )
 
     if tid not in TASK_CONFIG:
