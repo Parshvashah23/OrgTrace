@@ -15,7 +15,7 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request, Body
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -57,13 +57,14 @@ DATA_DIR = str(PROJECT_ROOT / "data" / "generated")
 # ── REQUEST / RESPONSE MODELS ───────────────────────────────────────────────
 
 class ResetRequest(BaseModel):
-    task_id: str
+    task_id: Optional[str] = None
+    task: Optional[str] = None  # Alias
     seed: int = 42
     session_id: str = "default"
 
 
 class StepRequest(BaseModel):
-    action_type: str
+    action_type: Optional[str] = None
     parameters: dict = {}
     reasoning: str = ""
     session_id: str = "default"
@@ -91,36 +92,56 @@ def health():
 
 
 @app.post("/reset")
-def reset(
-    request: Optional[ResetRequest] = None,
+async def reset(
+    request: Request,
     task_id: Optional[str] = Query(None),
-    session_id: str = Query("default"),
+    task: Optional[str] = Query(None),
+    session_id: Optional[str] = Query(None),
 ) -> dict:
     """
-    Initialize a new episode.
-
-    Accepts either a JSON body (ResetRequest) or query parameters (task_id).
+    Initialize a new episode. Robustly accepts parameters from JSON body, 
+    query parameters, or form data.
     """
-    # Extract values from either request body or query params
-    if request:
-        tid = request.task_id
-        sid = request.session_id
-        seed = request.seed
-    elif task_id:
-        tid = task_id
-        sid = session_id
-        seed = 42  # default seed
-    else:
+    # 1. Initialize with defaults
+    tid = None
+    sid = "default"
+    seed = 42
+
+    # 2. Extract from JSON Body (if present)
+    try:
+        body_data = await request.json()
+        if isinstance(body_data, dict):
+            tid = body_data.get("task_id") or body_data.get("task")
+            sid = body_data.get("session_id") or sid
+            seed = body_data.get("seed", seed)
+    except:
+        pass # Not JSON
+
+    # 3. Overwrite with Query Params (if present)
+    tid = task_id or task or tid
+    sid = session_id or sid
+
+    # 4. Final check for Form data (if tid still missing)
+    if not tid:
+        try:
+            form = await request.form()
+            tid = form.get("task_id") or form.get("task")
+            sid = form.get("session_id") or sid
+            if form.get("seed"):
+                seed = int(form.get("seed"))
+        except:
+            pass
+
+    if not tid:
         raise HTTPException(
             status_code=400,
-            detail="Missing task_id. Provide in JSON body or as query parameter."
+            detail="Missing task_id. Provide in JSON body (task_id), query parameter (?task_id=), or form data."
         )
 
     if tid not in TASK_CONFIG:
         raise HTTPException(
             status_code=400,
-            detail=f"Unknown task_id: {tid}. "
-                   f"Must be one of {list(TASK_CONFIG.keys())}"
+            detail=f"Unknown task_id: {tid}. Must be one of {list(TASK_CONFIG.keys())}"
         )
 
     env = OrgMemoryEnv(data_dir=DATA_DIR, seed=seed)
@@ -137,26 +158,56 @@ def reset(
 
 
 @app.post("/step")
-def step(request: StepRequest) -> StepResponse:
+async def step(request: Request) -> StepResponse:
     """
     Execute one agent action.
-
-    The action must be a valid Action with action_type and parameters.
-    Returns observation, reward, done flag, and info dict.
     """
-    if request.session_id not in envs:
+    # Robust parameter extraction
+    action_type = None
+    params = {}
+    reasoning = ""
+    sid = "default"
+
+    # 1. Try to extract from JSON Body
+    try:
+        body_data = await request.json()
+        if isinstance(body_data, dict):
+            action_type = body_data.get("action_type")
+            params = body_data.get("parameters", {})
+            reasoning = body_data.get("reasoning", "")
+            sid = body_data.get("session_id") or sid
+    except:
+        pass
+
+    # Fallback to Form data if body-based extraction failed
+    if not action_type:
+        try:
+            form = await request.form()
+            action_type = form.get("action_type")
+            sid = form.get("session_id") or sid
+            reasoning = form.get("reasoning") or reasoning
+            if form.get("parameters"):
+                import json
+                params = json.loads(form.get("parameters"))
+        except:
+            pass
+
+    if not action_type:
+        raise HTTPException(status_code=400, detail="Missing action_type")
+
+    if sid not in envs:
         raise HTTPException(
             status_code=404,
             detail="Session not found. Call /reset first."
         )
 
-    env = envs[request.session_id]
+    env = envs[sid]
 
     try:
         action = Action(
-            action_type=request.action_type,
-            parameters=request.parameters,
-            reasoning=request.reasoning,
+            action_type=action_type,
+            parameters=params,
+            reasoning=reasoning,
         )
     except Exception as e:
         raise HTTPException(
