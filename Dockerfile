@@ -11,8 +11,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
+# Install the package itself to register the 'server' script
+RUN pip install -e .
+
 # Pre-generate corpus at build time
 RUN python generator.py --seed 42
 
 EXPOSE 7860
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "7860"]
+CMD ["server"]

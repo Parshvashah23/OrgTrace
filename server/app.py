@@ -20,7 +20,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 # Ensure project root is importable
-PROJECT_ROOT = Path(__file__).parent
+PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from org_env.models import Action, Observation, Reward
@@ -355,3 +355,13 @@ async def startup_event():
         corpus, ground_truth = generator.generate_corpus()
         generator.save(corpus, ground_truth)
         print(f"  ✅ Corpus generated.")
+
+
+def main():
+    """Entry point for the 'server' console script."""
+    import uvicorn
+    uvicorn.run("server.app:app", host="0.0.0.0", port=7860, reload=False)
+
+
+if __name__ == "__main__":
+    main()
