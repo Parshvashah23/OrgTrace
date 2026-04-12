@@ -111,15 +111,24 @@ class OrgMemoryEnv:
 
         # Load personas from data module
         import sys
-        sys.path.insert(0, str(self.data_dir.parent.parent))
-        from data.personas import PERSONAS, PERSONA_BY_ID
-        self.personas = PERSONAS
-        self.persona_by_id = {p.id: p for p in PERSONAS}
+        root_dir = str(self.data_dir.parent.parent)
+        if root_dir not in sys.path:
+            sys.path.insert(0, root_dir)
+        
+        try:
+            from data.personas import PERSONAS, PERSONA_BY_ID
+            self.personas = PERSONAS
+            self.persona_by_id = {p.id: p for p in PERSONAS}
+        except ImportError as e:
+            raise ImportError(f"Failed to import personas from data.personas. Root dir: {root_dir}. Error: {e}")
 
         # Load projects
-        from data.seeds import PROJECTS, PROJECT_BY_ID
-        self.projects = PROJECTS
-        self.project_by_id = {p.id: p for p in PROJECTS}
+        try:
+            from data.seeds import PROJECTS, PROJECT_BY_ID
+            self.projects = PROJECTS
+            self.project_by_id = {p.id: p for p in PROJECTS}
+        except ImportError as e:
+            raise ImportError(f"Failed to import seeds from data.seeds. Root dir: {root_dir}. Error: {e}")
 
         # Build org graph
         self._build_org_graph()

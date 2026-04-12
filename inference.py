@@ -1,8 +1,8 @@
-import asyncio
 import os
 import json
 import textwrap
 import sys
+import traceback
 from pathlib import Path
 from typing import List, Optional, Dict, Any
 
@@ -11,12 +11,6 @@ from org_env.org_memory_env import OrgMemoryEnv, TASK_CONFIG
 from org_env.models import Action
 
 # ── CONFIG ───────────────────────────────────────────────────────────────────
-
-# Mandatory environment variables
-API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
-MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
-HF_TOKEN = os.getenv("HF_TOKEN")
-LOCAL_IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME")  # Optional
 
 # Task Configuration
 TASK_ID = os.getenv("ORG_TRACE_TASK", "decision_archaeology")
@@ -63,21 +57,6 @@ ACTION_SCHEMA_JSON = json.dumps({
     "required": ["action_type", "parameters", "reasoning"]
 })
 
-SUBMISSION_SCHEMA = {
-    "decision_archaeology": {
-        "root_decision": "message_id",
-        "decision_chain": ["id1", "id2"],
-        "accountable_person": "id",
-        "decision_text": "summary"
-    },
-    "commitment_detection": {
-        "dropped_commitments": [{"source_message_id": "id", "committer": "id", "commitment_text": "text", "risk_level": "low|med|high"}]
-    },
-    "knowledge_recovery": {
-        "artifact": {"systems": [], "decisions": [], "collaborators": [], "timeline": [], "open_items": [], "freeform_notes": ""}
-    }
-}
-
 SYSTEM_PROMPT = """You are an organizational memory analyst. You have access to a company's
 communication history. Your job is to investigate the given query, retrieve context, and submit a structured answer.
 
@@ -111,25 +90,38 @@ def format_observation(obs_dict: Dict[str, Any], step: int, max_steps: int) -> s
 
 # ── MAIN LOOP ────────────────────────────────────────────────────────────────
 
-async def main():
-    log_start(task=TASK_ID, env=BENCHMARK, model=MODEL_NAME)
-
-    if not HF_TOKEN:
-        print("[DEBUG] Missing HF_TOKEN environment variable.", flush=True)
-
-    client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
-    
-    # Initialize Environment
-    data_dir = "data/generated/"
-    env = OrgMemoryEnv(data_dir=data_dir, seed=42)
-    
+def main():
+    # State tracking variables
     rewards: List[float] = []
     steps_taken = 0
     score = 0.0
     success = False
-    history = []
+
+    # 1. Configuration Check
+    API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
+    MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
+    HF_TOKEN = os.getenv("HF_TOKEN")
+    
+    log_start(task=TASK_ID, env=BENCHMARK, model=MODEL_NAME)
 
     try:
+        if not HF_TOKEN:
+            print("[DEBUG] Warning: HF_TOKEN environment variable is missing.", flush=True)
+
+        # 2. Client Initialization
+        client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN or "none")
+        
+        # 3. Environment Initialization
+        # Resolve data directory relative to script
+        script_dir = Path(__file__).parent
+        data_dir = script_dir / "data" / "generated"
+        
+        if not data_dir.exists():
+            raise FileNotFoundError(f"Data directory not found at {data_dir.absolute()}")
+            
+        env = OrgMemoryEnv(data_dir=str(data_dir), seed=42)
+        
+        # 4. Episode Reset
         obs = env.reset(TASK_ID)
         max_steps = obs.max_steps
         
@@ -138,6 +130,7 @@ async def main():
             max_steps=max_steps
         )
         
+        # 5. Interaction Loop
         for step in range(1, max_steps + 1):
             obs_dict = obs.model_dump()
             user_prompt = format_observation(obs_dict, step, max_steps)
@@ -185,11 +178,13 @@ async def main():
                 success = score >= SUCCESS_SCORE_THRESHOLD
                 break
 
-    except Exception as exc:
-        print(f"[DEBUG] Inference loop failed: {exc}", flush=True)
+    except Exception:
+        print("[DEBUG] Fatal Error in Inference Script:", flush=True)
+        traceback.print_exc()
     finally:
+        # Ensure we always log the end for the validator
         log_end(success=success, steps=steps_taken, score=score, rewards=rewards)
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
